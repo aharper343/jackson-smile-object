@@ -18,7 +18,12 @@ import org.openapitools.model.Tag;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalField;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -34,7 +39,7 @@ class JacksonPerformanceTest {
     private static final Random RANDOM = new Random(12384754124L);
 
     private static final Pet PET = createPet(0);
-    private static final Pet BIG_PET = createPet(100);
+    private static final Pet BIG_PET = createPet(1000);
 
     private static final int WARM_ITERATIONS = 100;
 
@@ -138,11 +143,12 @@ class JacksonPerformanceTest {
 
     static Pet createPet(final int numTags) {
         final Pet pet = new Pet();
-        pet.setId(id());
+        pet.id(id());
         pet.name(name());
-        pet.setStatus(JsonNullable.of(status()));
+        pet.status(status());
         pet.category(createCategory());
-        pet.setTags(createTags(numTags));
+        pet.createdOn(offsetDateTime());
+        pet.tags(createTags(numTags));
         return pet;
     }
 
@@ -164,7 +170,7 @@ class JacksonPerformanceTest {
     static Category createCategory() {
         final Category category = new Category();
         category.id(id());
-        category.name(UUID.randomUUID().toString());
+        category.name(name());
         return category;
     }
 
@@ -178,6 +184,13 @@ class JacksonPerformanceTest {
         };
     }
 
+    static OffsetDateTime offsetDateTime() {
+        return Instant.ofEpochMilli(time()).atOffset(ZoneOffset.UTC).withYear(2024);
+    }
+
+    static long time()  {
+        return Math.abs(RANDOM.nextLong());
+    }
 
     static long id() {
         return Math.abs(RANDOM.nextLong());

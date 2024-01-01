@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 import org.openapitools.jackson.nullable.JsonNullable;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -24,6 +26,11 @@ public class Pet   {
   private List<String> photoUrls = new ArrayList<>();
 
   private List<Tag> tags;
+
+  private OffsetDateTime createdOn;
+
+  private JsonNullable<LocalDate> lastModifiedOn = JsonNullable.<LocalDate>undefined();
+
 
   /**
    * pet status in the store
@@ -204,6 +211,42 @@ public class Pet   {
     this.status = status;
   }
 
+  public Pet createdOn(OffsetDateTime createdOn) {
+    this.createdOn = createdOn;
+    return this;
+  }
+
+  /**
+   * Get createdOn
+   * @return createdOn
+   */
+  @JsonProperty("createdOn")
+  public OffsetDateTime getCreatedOn() {
+    return createdOn;
+  }
+
+  public void setCreatedOn(OffsetDateTime createdOn) {
+    this.createdOn = createdOn;
+  }
+
+  public Pet lastModifiedOn(LocalDate lastModifiedOn) {
+    this.lastModifiedOn = JsonNullable.of(lastModifiedOn);
+    return this;
+  }
+
+  /**
+   * Get modifiedOn
+   * @return modifiedOn
+   */
+  @JsonProperty("lastModifiedOn")
+  public JsonNullable<LocalDate> getLastModifiedOn() {
+    return lastModifiedOn;
+  }
+
+  public void setLastModifiedOn(JsonNullable<LocalDate> lastModifiedOn) {
+    this.lastModifiedOn = lastModifiedOn;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -214,11 +257,13 @@ public class Pet   {
     }
     Pet pet = (Pet) o;
     return Objects.equals(this.id, pet.id) &&
-        Objects.equals(this.category, pet.category) &&
-        Objects.equals(this.name, pet.name) &&
-        Objects.equals(this.photoUrls, pet.photoUrls) &&
-        Objects.equals(this.tags, pet.tags) &&
-        equalsNullable(this.status, pet.status);
+            Objects.equals(this.category, pet.category) &&
+            Objects.equals(this.name, pet.name) &&
+            Objects.equals(this.photoUrls, pet.photoUrls) &&
+            Objects.equals(this.tags, pet.tags) &&
+            equalsNullable(this.status, pet.status) &&
+            Objects.equals(this.createdOn, pet.createdOn) &&
+            equalsNullable(this.lastModifiedOn, pet.lastModifiedOn);
   }
 
   private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
@@ -227,7 +272,7 @@ public class Pet   {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, category, name, photoUrls, tags, hashCodeNullable(status));
+    return Objects.hash(id, category, name, photoUrls, tags, hashCodeNullable(status), createdOn, hashCodeNullable(lastModifiedOn));
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -247,9 +292,12 @@ public class Pet   {
     sb.append("    photoUrls: ").append(toIndentedString(photoUrls)).append("\n");
     sb.append("    tags: ").append(toIndentedString(tags)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    createdOn: ").append(toIndentedString(createdOn)).append("\n");
+    sb.append("    lastModifiedOn: ").append(toIndentedString(lastModifiedOn)).append("\n");
     sb.append("}");
     return sb.toString();
   }
+
 
   /**
    * Convert the given object to string with each line indented by 4 spaces
@@ -262,4 +310,3 @@ public class Pet   {
     return o.toString().replace("\n", "\n    ");
   }
 }
-
