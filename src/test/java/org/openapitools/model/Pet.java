@@ -44,7 +44,7 @@ public class Pet   {
     
     UNKNOWN_DEFAULT_OPEN_API("unknown_default_open_api");
 
-    private String value;
+    private final String value;
 
     StatusEnum(String value) {
       this.value = value;
