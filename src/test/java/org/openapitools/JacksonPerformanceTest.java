@@ -10,19 +10,15 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.openapitools.jackson.nullable.JsonNullableModule;
-import org.openapitools.model.Category;
 import org.openapitools.model.Pet;
-import org.openapitools.model.Tag;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Objects;
+import java.util.Random;
 import java.util.zip.GZIPOutputStream;
 
 class JacksonPerformanceTest {
@@ -34,8 +30,9 @@ class JacksonPerformanceTest {
 
     private static final Random RANDOM = new Random(12384754124L);
 
-    private static final Pet PET = createPet(0);
-    private static final Pet BIG_PET = createPet(1000);
+    private static final PetMaker petMaker = new PetMaker(RANDOM);
+
+    private static final Pet[] PET = { petMaker.createPet(0), petMaker.createPet(100), petMaker.createPet(1000) };
 
     private static final int WARM_ITERATIONS = 100;
 
@@ -45,24 +42,26 @@ class JacksonPerformanceTest {
 
     @BeforeAll
     static void beforeAll() {
-        System.out.printf("small pet=%s\nbig pet=%s\n", PET, BIG_PET);
+        for (int i = 0; i < PET.length; i++) {
+            System.out.printf("Pet %d\n%s\n\n", i, PET[i]);
+        }
     }
-
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false })
-    void testObjectSmile(final boolean useBigPet) throws Exception {
-        testObjectSmile(false, useBigPet);
-        testObjectSmile(true, useBigPet);
+    @ValueSource(booleans = {true, false})
+    void testObjectSmile(final boolean userAfterBurner) throws Exception {
+        for (int i = 0; i < PET.length; i++) {
+            testObjectSmile(userAfterBurner, i);
+        }
     }
 
-    void testObjectSmile(final boolean userAfterBurner, final boolean useBigPet) throws Exception {
-        final String nm = (userAfterBurner ? "AB" : "no-AB") + "/" + (useBigPet ? "B" : "S");
-        final Pet pet = useBigPet ? BIG_PET : PET;
-        System.out.printf("\n\nObjectMapper - SmileMapper : %s\n", nm);
+    void testObjectSmile(final boolean userAfterBurner, final int petNum) throws Exception {
+        final Pet pet = PET[petNum];
+        final String nm = (userAfterBurner ? "+AB" : "-AB") + "/" + String.valueOf(petNum) + "/" + pet.getTags().size();
+        System.out.printf("\n\nObjectMapper/SmileMapper:%s\n", nm);
         final Result objectResult = testObjectMapper(userAfterBurner, nm, pet);
         final Result smileResult = testSmileMapper(userAfterBurner, nm, pet);
-        System.out.printf("%-8s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
+        System.out.printf("%-10s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
                 objectResult.numBytes, objectResult.numCompressedBytes, 100d * ((double)objectResult.numCompressedBytes) / ((double)objectResult.numBytes),
                 smileResult.numBytes, smileResult.numCompressedBytes, 100d * ((double)smileResult.numCompressedBytes) / ((double)smileResult.numBytes),
                 100d * ((double)smileResult.numBytes) / ((double)objectResult.numBytes), 100d * ((double)smileResult.numCompressedBytes) / ((double)objectResult.numCompressedBytes),
@@ -70,19 +69,20 @@ class JacksonPerformanceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false })
-    void testSmileObject(final boolean useBigPet) throws Exception {
-        testSmileObject(false, useBigPet);
-        testSmileObject(true, useBigPet);
+    @ValueSource(booleans = {true, false})
+    void testSmileObject(final boolean useAfterBurner) throws Exception {
+        for (int i = 0; i < PET.length; i++) {
+            testSmileObject(useAfterBurner, i);
+        }
     }
 
-    void testSmileObject(final boolean userAfterBurner, final boolean useBigPet) throws Exception {
-        final String nm = (userAfterBurner ? "AB" : "no-AB") + "/" + (useBigPet ? "B" : "S");
-        final Pet pet = useBigPet ? BIG_PET : PET;
-        System.out.printf("\n\nSmileMapper - ObjectMapper : %s\n", nm);
+    void testSmileObject(final boolean userAfterBurner, final int petNum) throws Exception {
+        final Pet pet = PET[petNum];
+        final String nm = (userAfterBurner ? "+AB" : "-AB") + "/" + String.valueOf(petNum) + "/" + pet.getTags().size();
+        System.out.printf("\n\nSmileMapper/ObjectMapper:%s\n", nm);
         final Result smileResult = testSmileMapper(userAfterBurner, nm, pet);
         final Result objectResult = testObjectMapper(userAfterBurner, nm, pet);
-        System.out.printf("%-8s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
+        System.out.printf("%-10s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
                 objectResult.numBytes, objectResult.numCompressedBytes, 100d * ((double)objectResult.numCompressedBytes) / ((double)objectResult.numBytes),
                 smileResult.numBytes, smileResult.numCompressedBytes, 100d * ((double)smileResult.numCompressedBytes) / ((double)smileResult.numBytes),
                 100d * ((double)smileResult.numBytes) / ((double)objectResult.numBytes), 100d * ((double)smileResult.numCompressedBytes) / ((double)objectResult.numCompressedBytes),
@@ -92,18 +92,18 @@ class JacksonPerformanceTest {
     Result testSmileMapper(final boolean useAfterBurner, final String nm, final Pet pet) throws Exception {
         final SmileMapper smileMapper = new SmileMapper();
         configure(smileMapper, useAfterBurner);
-        return test("SmileMapper-" + nm, smileMapper, pet);
+        return test("SmileMapper:" + nm, smileMapper, pet);
     }
 
     Result testObjectMapper(final boolean userAfterBurner, final String nm, final Pet pet) throws Exception {
         final ObjectMapper objectMapper = new ObjectMapper();
         configure(objectMapper, userAfterBurner);
-        return test("ObjectMapper-" + nm, objectMapper, pet);
+        return test("ObjectMapper:" + nm, objectMapper, pet);
     }
 
     Result test(final String name, final ObjectMapper objectMapper, final Pet pet) throws Exception {
         if (DEBUG) {
-            System.out.printf("%s: %s\n", name, ToStringBuilder.reflectionToString(objectMapper, RecursiveToStringStyle.MULTI_LINE_STYLE));
+            System.out.printf("%-25s: %s\n", name, ToStringBuilder.reflectionToString(objectMapper, RecursiveToStringStyle.MULTI_LINE_STYLE));
         }
         test(name, objectMapper, WARM_ITERATIONS, false, pet);
         return test(name, objectMapper, RECORD_ITERATIONS, true, pet);
@@ -129,15 +129,15 @@ class JacksonPerformanceTest {
         if (DEBUG || DEBUG_RECORD || record) {
             final Duration duration = Duration.of(durationNS, ChronoUnit.NANOS);
             final Duration avgOpDuration = Duration.of(avgOpDurationNS, ChronoUnit.NANOS);
-            System.out.printf("%-20s %-5s iterations=%-10d total duration=%-14s average operation duration=%-14s ops/s=%-10d\n", name, record, iterations, duration, avgOpDuration, opsPerSecond);
+            System.out.printf("%-25s %-5s iterations=%-10d total duration=%-14s average operation duration=%-14s ops/s=%-10d\n", name, record, iterations, duration, avgOpDuration, opsPerSecond);
         }
         if (DEBUG) {
             final String result = (new String(bytes, StandardCharsets.US_ASCII)).replace('\n', '?');
-            System.out.printf("%-20s %-5s size=%-8d -> %s\n", name, record, bytes.length, result);
+            System.out.printf("%-25s %-5s size=%-8d -> %s\n", name, record, bytes.length, result);
         }
         final byte[] compressedBytes = compress(bytes);
         if (Objects.nonNull(compressedBytes) && DEBUG) {
-            System.out.printf("%-20s %-5s size=%-8d compressed=%-8d ratio=%.2f%%\n", name, record, bytes.length, compressedBytes.length, 100d * ((float)compressedBytes.length) / ((float)bytes.length));
+            System.out.printf("%-25s %-5s size=%-8d compressed=%-8d ratio=%.2f%%\n", name, record, bytes.length, compressedBytes.length, 100d * ((float)compressedBytes.length) / ((float)bytes.length));
         }
         return new Result(iterations, durationNS, avgOpDurationNS, opsPerSecond, bytes.length, Objects.nonNull(compressedBytes) ? compressedBytes.length : 0);
     }
@@ -163,64 +163,5 @@ class JacksonPerformanceTest {
         if (useAfterBurner) {
             objectMapper.registerModule(new com.fasterxml.jackson.module.afterburner.AfterburnerModule());
         }
-    }
-
-    static Pet createPet(final int numTags) {
-        final Pet pet = new Pet();
-        pet.id(id());
-        pet.name(name());
-        pet.status(status());
-        pet.category(createCategory());
-        pet.createdOn(offsetDateTime());
-        pet.tags(createTags(numTags));
-        return pet;
-    }
-
-    static List<Tag> createTags(final int numTags) {
-        final List<Tag> tags = new ArrayList<>(numTags);
-        for (int i = 0; i < numTags; i++) {
-            tags.add(createTag());
-        }
-        return tags;
-    }
-
-    static Tag createTag() {
-        final Tag tag = new Tag();
-        tag.id(id());
-        tag.name(name());
-        return tag;
-    }
-
-    static Category createCategory() {
-        final Category category = new Category();
-        category.id(id());
-        category.name(name());
-        return category;
-    }
-
-    static Pet.StatusEnum status() {
-        //final int value = Math.abs(RANDOM.nextInt()) % 3;
-        final int value = 0;
-        return switch (value) {
-            case 0 -> Pet.StatusEnum.AVAILABLE;
-            case 1 -> Pet.StatusEnum.PENDING;
-            default -> Pet.StatusEnum.SOLD;
-        };
-    }
-
-    static OffsetDateTime offsetDateTime() {
-        return Instant.ofEpochMilli(time()).atOffset(ZoneOffset.UTC).withYear(2024);
-    }
-
-    static long time()  {
-        return Math.abs(RANDOM.nextLong());
-    }
-
-    static long id() {
-        return Math.abs(RANDOM.nextLong());
-    }
-
-    static String name() {
-        return new UUID(RANDOM.nextLong(), RANDOM.nextLong()).toString();
     }
 }
