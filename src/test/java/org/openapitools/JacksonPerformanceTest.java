@@ -61,12 +61,9 @@ class JacksonPerformanceTest {
         System.out.printf("\n\nObjectMapper/SmileMapper:%s\n", nm);
         final Result objectResult = testObjectMapper(userAfterBurner, nm, pet);
         final Result smileResult = testSmileMapper(userAfterBurner, nm, pet);
-        System.out.printf("%-10s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
-                objectResult.numBytes, objectResult.numCompressedBytes, 100d * ((double)objectResult.numCompressedBytes) / ((double)objectResult.numBytes),
-                smileResult.numBytes, smileResult.numCompressedBytes, 100d * ((double)smileResult.numCompressedBytes) / ((double)smileResult.numBytes),
-                100d * ((double)smileResult.numBytes) / ((double)objectResult.numBytes), 100d * ((double)smileResult.numCompressedBytes) / ((double)objectResult.numCompressedBytes),
-                objectResult.opsPerSecond, smileResult.opsPerSecond, 100d * ((double)smileResult.opsPerSecond) / ((double)objectResult.opsPerSecond));
+        report(nm, objectResult, smileResult);
     }
+
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
@@ -82,11 +79,7 @@ class JacksonPerformanceTest {
         System.out.printf("\n\nSmileMapper/ObjectMapper:%s\n", nm);
         final Result smileResult = testSmileMapper(userAfterBurner, nm, pet);
         final Result objectResult = testObjectMapper(userAfterBurner, nm, pet);
-        System.out.printf("%-10s Size ObjectMapper=%d/%d/%.2f%% SmileMapper=%d/%d/%.2f%% ratio=%.2f%%/%.2f%% Ops/Sec ObjectMapper=%d SmileMapper=%d ratio=%.2f%%\n", nm,
-                objectResult.numBytes, objectResult.numCompressedBytes, 100d * ((double)objectResult.numCompressedBytes) / ((double)objectResult.numBytes),
-                smileResult.numBytes, smileResult.numCompressedBytes, 100d * ((double)smileResult.numCompressedBytes) / ((double)smileResult.numBytes),
-                100d * ((double)smileResult.numBytes) / ((double)objectResult.numBytes), 100d * ((double)smileResult.numCompressedBytes) / ((double)objectResult.numCompressedBytes),
-                objectResult.opsPerSecond, smileResult.opsPerSecond, 100d * ((double)smileResult.opsPerSecond) / ((double)objectResult.opsPerSecond));
+        report(nm, objectResult, smileResult);
     }
 
     Result testSmileMapper(final boolean useAfterBurner, final String nm, final Pet pet) throws Exception {
@@ -109,37 +102,66 @@ class JacksonPerformanceTest {
         return test(name, objectMapper, RECORD_ITERATIONS, true, pet);
     }
 
-    record Result(int iterations, long durationNS, long avgOpDurationNS, long opsPerSecond, int numBytes, int numCompressedBytes) {
+    record Result(String name, Timing serialize, Timing deserialize, int numBytes, int numCompressedBytes) {
 
+        double ratio() {
+            return ((double)numCompressedBytes()) / ((double)numBytes());
+        }
+        String formatted() {
+            return String.format("%-25s uncompressed=%-,10d compressed=%-,10d %6.2f%%%n\t%s%n\t%s", name(), numBytes(), numCompressedBytes(), 100d * ratio(), serialize().formatted(), deserialize().formatted());
+        }
     }
 
+    record Timing(String name, int iterations, long durationNS) {
+
+        Duration duration() {
+            return Duration.of(durationNS(), ChronoUnit.NANOS);
+        }
+
+        long avgOpDurationNS() {
+            return durationNS / ((long)iterations);
+        }
+
+        Duration avgOpDuration() {
+            return Duration.of(avgOpDurationNS(), ChronoUnit.NANOS);
+        }
+
+        long opsPerSecond() {
+            return NANOS_IN_A_SECOND / avgOpDurationNS();
+        }
+
+        String formatted() {
+            return String.format("%-12s avgOpDuration=%-14s ops/sec=%-,10d", name(), avgOpDuration(), opsPerSecond());
+        }
+    }
     Result test(final String name, final ObjectMapper objectMapper, final int iterations, final boolean record, final Pet pet) throws Exception {
         byte [] bytes = new byte[0];
-        long durationNS = 0;
+        Pet tmp = null;
+        long serializeDurationNS = 0;
+        long deserializeDurationNS = 0;
         for (int i = 0; i < iterations; i++) {
             if (i % GC_MODULUS == 0) {
                 System.gc();
             }
-            final long startNS = System.nanoTime();
+            long startNS = System.nanoTime();
             bytes = objectMapper.writeValueAsBytes(pet);
-            durationNS += System.nanoTime() - startNS;
-        }
-        final long avgOpDurationNS = durationNS / (long)iterations;
-        final long opsPerSecond = NANOS_IN_A_SECOND / avgOpDurationNS;
-        if (DEBUG || DEBUG_RECORD || record) {
-            final Duration duration = Duration.of(durationNS, ChronoUnit.NANOS);
-            final Duration avgOpDuration = Duration.of(avgOpDurationNS, ChronoUnit.NANOS);
-            System.out.printf("%-25s %-5s iterations=%-10d total duration=%-14s average operation duration=%-14s ops/s=%-10d\n", name, record, iterations, duration, avgOpDuration, opsPerSecond);
+            serializeDurationNS += System.nanoTime() - startNS;
+            startNS = System.nanoTime();
+            tmp = objectMapper.readValue(bytes, Pet.class);
+            deserializeDurationNS += System.nanoTime() - startNS;
         }
         if (DEBUG) {
             final String result = (new String(bytes, StandardCharsets.US_ASCII)).replace('\n', '?');
-            System.out.printf("%-25s %-5s size=%-8d -> %s\n", name, record, bytes.length, result);
+            System.out.printf("%-25s %-5s size=%-,10d -> %s\n", name, record, bytes.length, result);
         }
         final byte[] compressedBytes = compress(bytes);
-        if (Objects.nonNull(compressedBytes) && DEBUG) {
-            System.out.printf("%-25s %-5s size=%-8d compressed=%-8d ratio=%.2f%%\n", name, record, bytes.length, compressedBytes.length, 100d * ((float)compressedBytes.length) / ((float)bytes.length));
+        final Timing serializeTiming = new Timing("Serialize", iterations, serializeDurationNS);
+        final Timing deserializeTiming = new Timing("Deserialize", iterations, deserializeDurationNS);
+        final Result result = new Result(name, serializeTiming, deserializeTiming, bytes.length, Objects.nonNull(compressedBytes) ? compressedBytes.length : 0);
+        if (DEBUG || DEBUG_RECORD || record) {
+            System.out.printf("%s\n", result.formatted());
         }
-        return new Result(iterations, durationNS, avgOpDurationNS, opsPerSecond, bytes.length, Objects.nonNull(compressedBytes) ? compressedBytes.length : 0);
+        return result;
     }
 
     private byte[] compress(final byte[] bytes) {
@@ -164,4 +186,21 @@ class JacksonPerformanceTest {
             objectMapper.registerModule(new com.fasterxml.jackson.module.afterburner.AfterburnerModule());
         }
     }
+
+    private void report(final String nm, final Result objectResult, final Result smileResult) {
+        System.out.printf("\n%-10s Uncompressed(bytes) ObjectMapper=%-,10d SmileMapper=%-,10d %6.2f%%%n" +
+                        "             Compressed(bytes) ObjectMapper=%-,10d SmileMapper=%-,10d %6.2f%%%n" +
+                        "              Serialize(ops/s) ObjectMapper=%-,10d SmileMapper=%-,10d %6.2f%%%n" +
+                        "            DeSerialize(ops/s) ObjectMapper=%-,10d SmileMapper=%-,10d %6.2f%%%n",
+                nm,
+                objectResult.numBytes(), smileResult.numBytes, 100d * ((double)(smileResult.numBytes())) / ((double)objectResult.numBytes()),
+                objectResult.numCompressedBytes(), smileResult.numCompressedBytes(), 100d * ratio(smileResult.numCompressedBytes(), objectResult.numCompressedBytes()),
+                objectResult.serialize.opsPerSecond(), smileResult.serialize.opsPerSecond(), 100d * ratio(smileResult.serialize.opsPerSecond(), objectResult.serialize.opsPerSecond()),
+                objectResult.deserialize.opsPerSecond(), smileResult.deserialize.opsPerSecond(), 100d * ratio(smileResult.deserialize.opsPerSecond(), objectResult.deserialize.opsPerSecond()));
+    }
+
+    private double ratio(final long a, final long b) {
+        return ((double)a) / ((double)b);
+    }
+
 }
